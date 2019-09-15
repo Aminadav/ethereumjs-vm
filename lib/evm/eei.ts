@@ -1,13 +1,13 @@
-import BN = require('bn.js')
-import { toBuffer } from 'ethereumjs-util'
-import Account from 'ethereumjs-account'
-import Blockchain from 'ethereumjs-blockchain'
-import Common from 'ethereumjs-common'
-import PStateManager from '../state/promisified'
-import { VmError, ERROR } from '../exceptions'
-import Message from './message'
-import EVM, { EVMResult } from './evm'
-const promisify = require('util.promisify')
+import BN = require("bn.js")
+import { toBuffer } from "ethereumjs-util"
+import Account from "ethereumjs-account"
+import Blockchain from "ethereumjs-blockchain"
+import Common from "ethereumjs-common"
+import PStateManager from "../state/promisified"
+import { VmError, ERROR } from "../exceptions"
+import Message from "./message"
+import EVM, { EVMResult } from "./evm"
+const promisify = require("util.promisify")
 
 /**
  * Environment data which is made available to EVM bytecode.
@@ -57,7 +57,13 @@ export default class EEI {
   _common: Common
   _gasLeft: BN
 
-  constructor(env: Env, state: PStateManager, evm: EVM, common: Common, gasLeft: BN) {
+  constructor(
+    env: Env,
+    state: PStateManager,
+    evm: EVM,
+    common: Common,
+    gasLeft: BN,
+  ) {
     this._env = env
     this._state = state
     this._evm = evm
@@ -118,7 +124,7 @@ export default class EEI {
    */
   async getExternalBalance(address: Buffer): Promise<BN> {
     // shortcut if current account
-    if (address.toString('hex') === this._env.address.toString('hex')) {
+    if (address.toString("hex") === this._env.address.toString("hex")) {
       return new BN(this._env.contract.balance)
     }
 
@@ -174,6 +180,7 @@ export default class EEI {
    * Returns the size of code running in current environment.
    */
   getCodeSize(): BN {
+    if (this._env.code) return new BN(0)
     return new BN(this._env.code.length)
   }
 
@@ -198,6 +205,7 @@ export default class EEI {
   async getExternalCodeSize(address: BN): Promise<BN> {
     const addressBuf = addressToBuffer(address)
     const code = await this._state.getContractCode(addressBuf)
+    if (!code) return new BN(0)
     return new BN(code.length)
   }
 
@@ -294,7 +302,9 @@ export default class EEI {
    * @param num - Number of block
    */
   async getBlockHash(num: BN): Promise<BN> {
-    const block = await promisify(this._env.blockchain.getBlock).bind(this._env.blockchain)(num)
+    const block = await promisify(this._env.blockchain.getBlock).bind(
+      this._env.blockchain,
+    )(num)
     return new BN(block.hash())
   }
 
@@ -353,17 +363,19 @@ export default class EEI {
 
   async _selfDestruct(toAddress: Buffer): Promise<void> {
     // only add to refund if this is the first selfdestruct for the address
-    if (!this._result.selfdestruct[this._env.address.toString('hex')]) {
+    if (!this._result.selfdestruct[this._env.address.toString("hex")]) {
       this._result.gasRefund = this._result.gasRefund.addn(
-        this._common.param('gasPrices', 'selfdestructRefund'),
+        this._common.param("gasPrices", "selfdestructRefund"),
       )
     }
 
-    this._result.selfdestruct[this._env.address.toString('hex')] = toAddress
+    this._result.selfdestruct[this._env.address.toString("hex")] = toAddress
 
     // Add to beneficiary balance
     const toAccount = await this._state.getAccount(toAddress)
-    const newBalance = new BN(this._env.contract.balance).add(new BN(toAccount.balance))
+    const newBalance = new BN(this._env.contract.balance).add(
+      new BN(toAccount.balance),
+    )
     toAccount.balance = toBuffer(newBalance)
     await this._state.putAccount(toAddress, toAccount)
 
@@ -399,7 +411,12 @@ export default class EEI {
   /**
    * Sends a message with arbitrary data to a given address path.
    */
-  async call(gasLimit: BN, address: Buffer, value: BN, data: Buffer): Promise<BN> {
+  async call(
+    gasLimit: BN,
+    address: Buffer,
+    value: BN,
+    data: Buffer,
+  ): Promise<BN> {
     const msg = new Message({
       caller: this._env.address,
       gasLimit: gasLimit,
@@ -416,7 +433,12 @@ export default class EEI {
   /**
    * Message-call into this account with an alternative account's code.
    */
-  async callCode(gasLimit: BN, address: Buffer, value: BN, data: Buffer): Promise<BN> {
+  async callCode(
+    gasLimit: BN,
+    address: Buffer,
+    value: BN,
+    data: Buffer,
+  ): Promise<BN> {
     const msg = new Message({
       caller: this._env.address,
       gasLimit: gasLimit,
@@ -436,7 +458,12 @@ export default class EEI {
    * state modifications. This includes log, create, selfdestruct and call with
    * a non-zero value.
    */
-  async callStatic(gasLimit: BN, address: Buffer, value: BN, data: Buffer): Promise<BN> {
+  async callStatic(
+    gasLimit: BN,
+    address: Buffer,
+    value: BN,
+    data: Buffer,
+  ): Promise<BN> {
     const msg = new Message({
       caller: this._env.address,
       gasLimit: gasLimit,
@@ -454,7 +481,12 @@ export default class EEI {
    * Message-call into this account with an alternative account’s code, but
    * persisting the current values for sender and value.
    */
-  async callDelegate(gasLimit: BN, address: Buffer, value: BN, data: Buffer): Promise<BN> {
+  async callDelegate(
+    gasLimit: BN,
+    address: Buffer,
+    value: BN,
+    data: Buffer,
+  ): Promise<BN> {
     const msg = new Message({
       caller: this._env.caller,
       gasLimit: gasLimit,
@@ -479,8 +511,9 @@ export default class EEI {
 
     // Check if account has enough ether and max depth not exceeded
     if (
-      this._env.depth >= this._common.param('vm', 'stackLimit') ||
-      (msg.delegatecall !== true && new BN(this._env.contract.balance).lt(msg.value))
+      this._env.depth >= this._common.param("vm", "stackLimit") ||
+      (msg.delegatecall !== true &&
+        new BN(this._env.contract.balance).lt(msg.value))
     ) {
       return new BN(0)
     }
@@ -493,7 +526,9 @@ export default class EEI {
 
     // add gasRefund
     if (results.execResult.gasRefund) {
-      this._result.gasRefund = this._result.gasRefund.add(results.execResult.gasRefund)
+      this._result.gasRefund = this._result.gasRefund.add(
+        results.execResult.gasRefund,
+      )
     }
 
     // this should always be safe
@@ -521,7 +556,12 @@ export default class EEI {
   /**
    * Creates a new contract with a given value.
    */
-  async create(gasLimit: BN, value: BN, data: Buffer, salt: Buffer | null = null): Promise<BN> {
+  async create(
+    gasLimit: BN,
+    value: BN,
+    data: Buffer,
+    salt: Buffer | null = null,
+  ): Promise<BN> {
     const selfdestruct = { ...this._result.selfdestruct }
     const msg = new Message({
       caller: this._env.address,
@@ -538,13 +578,16 @@ export default class EEI {
 
     // Check if account has enough ether and max depth not exceeded
     if (
-      this._env.depth >= this._common.param('vm', 'stackLimit') ||
-      (msg.delegatecall !== true && new BN(this._env.contract.balance).lt(msg.value))
+      this._env.depth >= this._common.param("vm", "stackLimit") ||
+      (msg.delegatecall !== true &&
+        new BN(this._env.contract.balance).lt(msg.value))
     ) {
       return new BN(0)
     }
 
-    this._env.contract.nonce = toBuffer(new BN(this._env.contract.nonce).addn(1))
+    this._env.contract.nonce = toBuffer(
+      new BN(this._env.contract.nonce).addn(1),
+    )
     await this._state.putAccount(this._env.address, this._env.contract)
 
     const results = await this._evm.executeMessage(msg)
@@ -555,7 +598,9 @@ export default class EEI {
 
     // add gasRefund
     if (results.execResult.gasRefund) {
-      this._result.gasRefund = this._result.gasRefund.add(results.execResult.gasRefund)
+      this._result.gasRefund = this._result.gasRefund.add(
+        results.execResult.gasRefund,
+      )
     }
 
     // this should always be safe
@@ -587,7 +632,12 @@ export default class EEI {
    * Creates a new contract with a given value. Generates
    * a deterministic address via CREATE2 rules.
    */
-  async create2(gasLimit: BN, value: BN, data: Buffer, salt: Buffer): Promise<BN> {
+  async create2(
+    gasLimit: BN,
+    value: BN,
+    data: Buffer,
+    salt: Buffer,
+  ): Promise<BN> {
     return this.create(gasLimit, value, data, salt)
   }
 
@@ -617,5 +667,5 @@ function trap(err: ERROR) {
 const MASK_160 = new BN(1).shln(160).subn(1)
 function addressToBuffer(address: BN) {
   if (Buffer.isBuffer(address)) return address
-  return address.and(MASK_160).toArrayLike(Buffer, 'be', 20)
+  return address.and(MASK_160).toArrayLike(Buffer, "be", 20)
 }
